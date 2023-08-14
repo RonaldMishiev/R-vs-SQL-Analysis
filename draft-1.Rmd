@@ -160,3 +160,4 @@ Finally, incorporating an analysis of trends over time by combined data from mul
 In conclusion, our analysis seems to give way towards a slight difference in annual compensations between data scientists/machine learning specialists who exclusively use R or SQL, with R having the higher true population mean as suggested by the Welch Two Sample t-test we have performed. So as data science students, we will prioritize R for more compensation.
 
 # References
+https://survey.stackoverflow.co/2023/
