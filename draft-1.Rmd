@@ -1,0 +1,162 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(scales)
+```
+
+```{r read data, include=FALSE}
+# we're only interested in data science or machine learning specialists
+survey = read_csv("survey_results_public.csv") %>% filter(DevType == "Data scientist or machine learning specialist")
+
+# we're interested in columns ConvertedCompYearly and LanguageHaveWorkedWith
+lang_comp = survey %>% summarise(lang=LanguageHaveWorkedWith, comp=ConvertedCompYearly) %>% drop_na()
+```
+
+```{r, include=FALSE}
+lang_comp = lang_comp %>% mutate(sql_or_r = case_when( 
+    str_detect(lang, "SQL") & !str_detect(lang, "\\bR\\b") ~ "SQL", 
+    str_detect(lang, "\\bR\\b")  & !str_detect(lang, "SQL") ~ "R"
+  ))
+sql_comp = lang_comp %>% filter(sql_or_r == "SQL") %>% pull(comp)
+r_comp = lang_comp %>% filter(sql_or_r == "R") %>% pull(comp)
+```
+
+
+# Introduction
+
+As aspiring data scientists, we want to know what to prioritize in our education. We are aware that both SQL and R are being used in the industry for analyzing big data. With SQL being an older language compared to R, we wanted to see which language we would benefit from learning.
+
+Our question of interest for this analysis is "**Do data scientists/machine learning specialists who use R and not SQL have a greater annual compensation than those who use SQL and not R?**"
+
+Thesis statement: **Data scientists/machine learning specialists who used R and not SQL in the past year had greater annual compensation between May 2022 - May 2023 than those who used R and not SQL**
+
+# Background
+The data set^[https://survey.stackoverflow.co/2023/] we chose is the cleaned results Stack Overflow Annual Developer Survey 2023. This survey was conducted online in May 8, 2023 to May 19, 2023. It was completed by 89184 volunteering developers recruited primarily through channels owned by Stack Overflow. The top sources of respondents were onsite messaging, blog posts, email/newsletter subscribers, banner ads, and social media posts.
+
+Each row represents one developer and each column represent their answers in 84 respective categories with most of them being optional to complete. 
+
+The columns we're interested in (all of which were optional to complete) are:
+
+- DevType, where the developers chose what described their current job,
+- LanguageHaveWorkedWith, where developers chose one or more languages they used in the past year, and
+- ConvertedCompYearly, where developers entered their annual salary which was then converted into USD from their given currencies using the exchange rate on June 2, 2023.
+
+
+"Data scientist/machine learning specialist" is one of the available categories in the DevType column and refers to people working with big data or artificial intelligence. We chose this category as it was the most similar to the job we are aspiring to do. SQL and R are programming languages for processing information in data sets. The data set we chose relates to our question as it provides us with information about how much people are compensated depending on their job and the programming languages they use.
+
+Due to US transport/export sanctions at the time the survey was inaccessible to prospective respondents in Crimea, Cuba, Iran, North Korea, and Syria, due to the traffic being blocked, with some respondents using ways to get around this. Also highly-engaged users on Stack Overflow and online were more likely to take the survey. Additionally, respondents who are dissatisfied with their compensation or ones with high enough compensations to lose anonymity might have been hesitant to respond. Finally, the purchasing power parity in different countries might be varied so simply converting respondents' compensations into USD might not be nuanced enough to get an understanding of the value they're compensated with. These factors affect interpretation of results as the data set may not reflect the true developer population.
+
+In the rest of the report, we intend to compare these two categories using various plotting methods like violin and box plots to create meaningful side-by-side visualizations that clearly show the distributions. We will also use numerical & statistical analysis such as the Welch Two Sample t-test to find an answer to our question, since the variables we're examining are independent variables with different variances and the Welch Two Sample t-test performs the best for this type of scenario. Finally, we will conclude with a discussion of our results, their significance, relation to our central question, and other possibilities.
+
+# Analysis
+```{r, include=FALSE}
+r_tibble = data.frame(comp = r_comp, lang="R")
+r_tibble %>% summarise(
+  n = n(),
+  mean = mean(comp),
+  sd = sd(comp),
+  min = min(comp),
+  max = max(comp)
+)
+```
+
+There are 79 developers who use R and not SQL and entered in the language they worked with and their yearly compensation. Their mean salary is $127,111 with salaries ranging from \$185 to \$1,200,000 and it has a standard deviation of \$156,195.
+
+```{r, include=FALSE}
+sql_tibble = data.frame(comp = sql_comp, lang="SQL")
+sql_tibble %>% summarise(
+  n = n(),
+  mean = mean(comp),
+  sd = sd(comp),
+  min = min(comp),
+  max = max(comp)
+)
+```
+
+There are 360 developers who use SQL and not R and entered in the language they worked with and their yearly compensation. Their mean salary is $102,402 with salaries ranging from \$170 to \$1,400,000 and it has a standard deviation of \$107,882.
+
+```{r, echo=FALSE}
+all = full_join(r_tibble, sql_tibble, by = join_by(comp, lang))
+
+ggplot(all) +
+  geom_violin(aes(y=lang, x=comp), fill="papayawhip", orientation = "y") +
+  geom_boxplot(aes(y=lang, x=comp), fill="transparent", color="blue")  + ylab("Language Used in The Past Year") +
+  xlab("Total Compensation in the Past Year") + ggtitle("Compensation of Data Scientists/Machine Learning Specialists\nby R or SQL Usage in the Past year") +
+  scale_x_continuous(labels = label_comma())
+```
+
+
+As visible in the graph above the compensations are both right-skewed. The mean, mode, and median of R are slightly larger. But it's not clear from the graph which language has a higher compensation.
+
+```{r, echo=FALSE}
+ggplot(all) +
+  geom_violin(aes(y=lang, x=comp), fill="papayawhip", orientation = "y", na.rm = TRUE) +
+  geom_boxplot(aes(y=lang, x=comp), fill="transparent", color="blue", na.rm = TRUE)  + ylab("Language Used in The Past Year") +
+  xlab("Total Compensation in the Past Year (Excluding Max Values)") + ggtitle("Compensation of Data Scientists/Machine Learning Specialists\nby R or SQL Usage in the Past year", subtitle = "Zoomed In") +
+  scale_x_continuous(labels = label_comma(), limits = c(0,6.5e5))
+```
+
+Zooming in past the largest values in each category (by not graphing the largest compensation in each category), we can better see how the mean compensation for R is slightly higher.
+
+Since we have two independent samples and we treat them as randomly sampled from the larger population of all data scientists, we can model them as following:
+
+$R \sim F_1(\mu_1, \sigma_1)$, which means the compensation for R follows a distribution $F_1$ with mean $\mu_1$ and standard deviation $\sigma_1$.
+
+$S \sim F_2(\mu_2, \sigma_2)$, which means the compensation for SQL follows a distribution $F_2$ with mean $\mu_2$ and standard deviation $\sigma_2.$
+
+Because we assume the variables we're analyzing are independent, have unequal variances, are randomly sampled, are continuous, and roughly follow a normal distribution with large enough sample size; we choose to use the Welch Two Sample t-test method. 
+
+Now we can do hypothesis testing with the one sided Welch Two Sample t-test method with unequal variances to see if the true difference in means is greater than 0. 
+
+Our hypotheses are:
+
+$H_0: \mu_1 = \mu_2$, which suggests the mean compensation for R and SQL are equal
+
+$H_a: \mu_1 > \mu_2$, which suggests the mean compensation for R is higher than the mean compensation for SQL
+
+Our confidence level will be 90% therefore $\alpha=0.10$
+
+```{r, include=FALSE}
+t.test(r_comp, sql_comp, alternative = "greater", conf.level = 0.90)
+```
+
+When we perform a one sided Welch Two Sample t-test with unequal variances we get $p=0.09209$.
+
+Since $p = 0.09209 < 0.10 = \alpha$ we can reject $H_0$ and accept $H_a$.
+
+This means in 90% of the samples we draw from the true population of all data scientists, the mean compensation of those who use R and not SQL is greater than those who use SQL and not R. So we infer data scientists who use R instead of SQL make more money with a 90% confidence level.
+
+
+# Discussion
+
+Our analysis seems to suggest that there is a slight difference in compensations between those who use R and not SQL & those who use SQL and not R. The of average compensation of each language and the graphs also support that data scientists exclusively using R make slightly more on average than those who use SQL. 
+
+The distributions in the graphs having similar characteristics and sharing the same patterns in skewness and distributions make them look similar, however the Welch Two Sample t-test supports our thesis because the p value is less than our significant value which allows us to reject that the true means are equal.
+
+Going back to our central question, this leads to the inference that if we want to make more money and have to choose between R and SQL, we should work with R.
+
+## Potential Shortcomings
+
+One of the biggest potential shortcomings is that we only considered those who specifically used R or SQL, exclusive to the other. Due to this, the samples may not be big enough to be completely representative of data scientists in general.
+
+Also, the compensations might not be independent as respondents who chose to use R might not have had the time to use SQL and vice versa.
+
+Along with this, we obtained our data from Stack Overflow's annual survey of their users, which may be a different demographic to the general population of data scientists so our sample is probably not a simple random sample. The inaccessibility of this survey in certain countries means our results might not hold true across the globe as a whole. Also individual factors such as hesitancy to respond or purchasing power of each respondent may distort the results a bit.
+
+Additionally, although it allows us to reject $H_0$, $p = 0.09209$ is not that low so we cannot say this is very strong evidence that the population means are different. Also keep in mind this is only for 2023 and might not represent upcoming years.
+
+## Future Improvements
+
+Potential future directions for additional work could include an expansion of analysis to include comparisons to those who use both R and SQL as well, along with including comparisons to those who use other popular languages (Python, Java, C, etc). Along with this, incorporating other column values in the survey like education levels may also allow for a more in-depth analysis.
+
+We could expand our data set by combining it with data collected from other sources which would represent a more varied sample since it's not just collected on one website.
+
+We could analyze the the confidence intervals to see if it's truly worth worrying about what language to focus on when there may not be a huge difference between the true means.
+
+Finally, incorporating an analysis of trends over time by combined data from multiple stack overflow annual surveys to see how compensation may have changed for certain languages could also allow us to get a better understanding of how much we might make as data scientists using a certain language in the future. The method of choice could be regression for an exploration like this.
+
+## Conclusion
+
+In conclusion, our analysis seems to give way towards a slight difference in annual compensations between data scientists/machine learning specialists who exclusively use R or SQL, with R having the higher true population mean as suggested by the Welch Two Sample t-test we have performed. So as data science students, we will prioritize R for more compensation.
+
+# References
